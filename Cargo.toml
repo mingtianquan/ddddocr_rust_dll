@@ -1,0 +1,11 @@
+[package]
+name = "ddddocr_rust_dll"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["cdylib"]
+name = "ddddocr"
+[dependencies]
+ddddocr = { git = "https://github.com/86maid/ddddocr.git", branch = "master" }
+bson = "2.11.0"
+serde_json = "1.0.117"
