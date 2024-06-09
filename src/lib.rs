@@ -7,21 +7,21 @@ use ddddocr::Ddddocr;
 use serde_json;
 //初始化ocr识别
 #[no_mangle]
-pub extern "C" fn initialize_OCR() -> *mut c_void {
+pub extern "stdcall" fn initialize_OCR() -> *mut c_void {
     let c = ddddocr::ddddocr_classification().unwrap();
     let ocr : *mut Ddddocr = Box::into_raw(Box::new(c));
     ocr.cast()
 }
 //初始化目标检测
 #[no_mangle]
-pub extern "C" fn initialize_detection() -> *mut c_void {
+pub extern "stdcall" fn initialize_detection() -> *mut c_void {
     let c = ddddocr::ddddocr_detection().unwrap();
     let ocr : *mut Ddddocr = Box::into_raw(Box::new(c));
     ocr.cast()
 }
 //ocr识别
 #[no_mangle]
-pub extern "C" fn classification_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
+pub extern "stdcall" fn classification_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
     let image_bytes = Vec::from(slice);
     let mut ocr: Box<Ddddocr> = unsafe{
@@ -46,7 +46,7 @@ pub extern "C" fn classification_byte_slice(c: *mut c_void,data: *const u8, len:
 }
 //目标检测
 #[no_mangle]
-pub extern "C" fn detection_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
+pub extern "stdcall" fn detection_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
     let image_bytes = Vec::from(slice);
     let mut ocr: Box<Ddddocr> = unsafe{
@@ -73,7 +73,7 @@ pub extern "C" fn detection_byte_slice(c: *mut c_void,data: *const u8, len: usiz
 }
 // 滑块算法一
 #[no_mangle]
-pub extern "C" fn slideral_gorithm_one_slide_match(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
+pub extern "stdcall" fn slideral_gorithm_one_slide_match(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
     let slicetarget = unsafe { std::slice::from_raw_parts(target, len) };
     let slicebackground = unsafe { std::slice::from_raw_parts(background, len2) };
     let target_bytes = Vec::from(slicetarget);
@@ -96,7 +96,7 @@ pub extern "C" fn slideral_gorithm_one_slide_match(target: *const u8, len: usize
 }
 // 滑块算法一
 #[no_mangle]
-pub extern "C" fn slideral_gorithm_one_simple_slide_match(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
+pub extern "stdcall" fn slideral_gorithm_one_simple_slide_match(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
     let slicetarget = unsafe { std::slice::from_raw_parts(target, len) };
     let slicebackground = unsafe { std::slice::from_raw_parts(background, len2) };
     let target_bytes = Vec::from(slicetarget);
@@ -116,7 +116,7 @@ pub extern "C" fn slideral_gorithm_one_simple_slide_match(target: *const u8, len
 }
 //滑块算法二
 #[no_mangle]
-pub extern "C" fn slideral_gorithm_two_slide_comparison(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
+pub extern "stdcall" fn slideral_gorithm_two_slide_comparison(target: *const u8, len: usize,background: *const u8, len2: usize) -> *const c_char {
     let slicetarget = unsafe { std::slice::from_raw_parts(target, len) };
     let slicebackground = unsafe { std::slice::from_raw_parts(background, len2) };
     let target_bytes = Vec::from(slicetarget);
@@ -136,7 +136,7 @@ pub extern "C" fn slideral_gorithm_two_slide_comparison(target: *const u8, len: 
     }
 }
 #[no_mangle]
-pub extern "C" fn free(ptr: *mut c_void) {
+pub extern "stdcall" fn freee(ptr: *mut c_void) {
     if ptr.is_null() {
         return;
     }
@@ -145,7 +145,7 @@ pub extern "C" fn free(ptr: *mut c_void) {
     }
 }
 #[no_mangle]
-pub extern "C" fn bson_to_json(data: *const u8, len: usize) -> *const c_char {
+pub extern "stdcall" fn bson_to_json(data: *const u8, len: usize) -> *const c_char {
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
 
     // 解析BSON并转换为JSON字符串
