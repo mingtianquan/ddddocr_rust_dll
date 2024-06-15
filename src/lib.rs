@@ -1,10 +1,13 @@
-use std::ffi::CString;
-use std::os::raw::{c_char, c_void};
+use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::Read;
+use std::os::raw::{c_char, c_int, c_uchar, c_void};
 use std::result::Result;
 use std::vec::Vec;
 use bson;
 use ddddocr::Ddddocr;
 use serde_json;
+use std::sync::{Arc, Mutex};
 //初始化ocr识别
 #[no_mangle]
 pub extern "stdcall" fn initialize_OCR() -> *mut c_void {
@@ -136,7 +139,7 @@ pub extern "stdcall" fn slideral_gorithm_two_slide_comparison(target: *const u8,
     }
 }
 #[no_mangle]
-pub extern "stdcall" fn freee(ptr: *mut c_void) {
+pub extern "stdcall" fn rust_free(ptr: *mut c_void) {
     if ptr.is_null() {
         return;
     }
@@ -179,4 +182,82 @@ fn bson_to_json_string(data: &[u8]) -> Result<String, Box<dyn std::error::Error>
     Ok(json_string)
 }
 
+
+//回调函数示例！
+type CallbackFn = extern "stdcall" fn(int_param: c_int, str_param: *const c_char);
+//callback传递易语言函数地址指针 到整数 (&回调) 回调为子程序  这个子程序2个参数一个是整数型一个是文本型
+#[no_mangle]
+pub extern "stdcall" fn set_callback_and_call(callback: CallbackFn) {
+    let int_param: c_int = 42; // 示例整数参数
+    let str_param = CString::new("Hello from Rust").expect("CString::new failed");
+    // 调用传递过来的回调函数
+    callback(int_param, str_param.as_ptr());
+}
+
+//callback2传递易语言函数地址指针 到整数 (&回调) 回调为子程序  这个子程序2个参数都是整数型  指针到字节集 (bin, len)取回字节集
+//这里是循环回调数据用loop循环往易语言传回字节集和字节集长度
+type CallbackFn2 = extern "stdcall" fn(byte_ptr: *const std::ffi::c_uchar, byte_len: std::ffi::c_int);
+
+#[no_mangle]
+pub extern "stdcall" fn set_callback_and_call2(callback: CallbackFn2) {
+    loop{
+        // 示例文本字符串
+        let text = "Hello from Rust";
+        // 将字符串转换为字节数组
+        let byte_array = text.as_bytes();
+        let byte_len: std::ffi::c_int = byte_array.len() as std::ffi::c_int;
+        // 调用传递过来的回调函数
+        callback(byte_array.as_ptr(), byte_len);
+
+    }
+
+}
+//callback3传递易语言函数地址指针 到整数 (&回调) 回调为子程序  这个子程序2个参数都是整数型  指针到字节集 (bin, len)取回字节集
+type CallbackFn3 = extern "stdcall" fn(byte_ptr: *const c_uchar, byte_len: c_int);
+
+lazy_static::lazy_static! {
+    static ref BUFFER: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+}
+//
+#[no_mangle]
+pub extern "stdcall" fn set_callback_and_call3(callback: CallbackFn3, file_path: *const c_char) {
+    loop{
+
+        // 将传入的 C 字符串转换为 Rust 字符串
+        let c_str = unsafe { CStr::from_ptr(file_path) };
+        let file_path = c_str.to_str().expect("Invalid UTF-8 string");
+        // 打开并读取图片文件
+        let mut file = File::open(file_path).expect("Failed to open file");
+        let buffer = BUFFER.clone();
+        let mut buffer_guard = buffer.lock().unwrap();
+        buffer_guard.clear();
+        file.read_to_end(&mut buffer_guard).expect("Failed to read file");
+        let byte_len: c_int = buffer_guard.len() as c_int;
+        // 使用 Box 包装回调函数，确保其生命周期长于调用
+        let boxed_callback = Box::new(callback);
+        // 调用传递过来的回调函数
+        boxed_callback(buffer_guard.as_ptr(), byte_len);
+        // 回调函数退出作用域后会自动释放内存
+
+    }
+
+}
+
+//这个示例是易语言传递一个空白文本例如：str ＝ 取空白文本 (300) 调用e_redirect (str)  调试输出 (str) 可以取回结果11111
+#[no_mangle]
+pub extern "stdcall" fn e_redirect(buffer: *mut c_char) {
+    // 创建一个Rust字符串
+    let rust_string = "11111";
+    // 将Rust字符串转换为C风格的字符串（包括空终止符）
+    let c_string = CString::new(rust_string).unwrap();
+    // 获取C风格字符串的字节切片（包括空终止符）
+    let bytes = c_string.as_bytes_with_nul();
+    // 安全地将字节复制到易语言提供的缓冲区中
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const _, buffer as *mut _, bytes.len());
+    }
+    // Rust字符串和C风格字符串的内存管理由Rust和CString自动处理
+    // 我们不需要在这里手动释放任何内存，因为C字符串的生命周期与Rust字符串绑定
+    // 易语言负责提供的缓冲区的内存管理
+}
 

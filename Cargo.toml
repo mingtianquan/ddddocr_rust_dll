@@ -1,6 +1,6 @@
 [package]
 name = "ddddocr_rust_dll"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 [lib]
 crate-type = ["cdylib"]
@@ -9,3 +9,6 @@ name = "ddddocr"
 ddddocr = { git = "https://github.com/86maid/ddddocr.git", branch = "master" }
 bson = "2.11.0"
 serde_json = "1.0.117"
+lazy_static = "1.4.0"
+tungstenite = "0.23.0"
+tokio = "1.38.0"
