@@ -8,6 +8,7 @@ use bson;
 use ddddocr::Ddddocr;
 use serde_json;
 use std::sync::{Arc, Mutex};
+use encoding::{all::GBK, Encoding, EncoderTrap};
 //初始化ocr识别
 #[no_mangle]
 pub extern "stdcall" fn initialize_OCR() -> *mut c_void {
@@ -35,16 +36,14 @@ pub extern "stdcall" fn classification_byte_slice(c: *mut c_void,data: *const u8
     // 保证c不被释放
     Box::into_raw(ocr);
     // res.as_ptr()
-    match CString::new(res) {
-        Ok(s) => {
-
-            s.into_raw()
+    match GBK.encode(&res, EncoderTrap::Replace) {
+        Ok(encoded) => {
+            match CString::new(encoded) {
+                Ok(s) => s.into_raw(),
+                Err(_) => std::ptr::null(),
+            }
         },
-
-        Err(_) => {
-            // 处理转换错误，例如返回空字符串或NULL指针
-            return std::ptr::null();
-        }
+        Err(_) => std::ptr::null(),
     }
 }
 //目标检测
@@ -58,6 +57,8 @@ pub extern "stdcall" fn detection_byte_slice(c: *mut c_void,data: *const u8, len
     //cstr函数结束生命周期就结束了，指向的指针也就无效了
     // let res = ocr.classification(image_bytes, false).unwrap();
     let res = ocr.detection(image_bytes).unwrap();
+
+
     // 保证c不被释放
     Box::into_raw(ocr);
     // res.as_ptr()
@@ -72,6 +73,42 @@ pub extern "stdcall" fn detection_byte_slice(c: *mut c_void,data: *const u8, len
             // 处理转换错误，例如返回空字符串或NULL指针
             return std::ptr::null();
         }
+    }
+}
+
+//目标检测二
+#[no_mangle]
+pub extern "stdcall" fn detection_byte_slice_er(c: *mut c_void, o: *mut c_void, data: *const u8, len: usize) -> *const c_char {
+    let slice = unsafe { std::slice::from_raw_parts(data, len) };
+    let image_bytes = Vec::from(slice);
+    let mut detection_ocr: Box<Ddddocr> = unsafe {
+        Box::from_raw(c.cast())
+    };
+
+    let mut ocr: Box<Ddddocr> = unsafe {
+        Box::from_raw(o.cast())
+    };
+
+    let image_slice: &[u8] = &image_bytes;
+    let result1 = detection_ocr.detection(image_slice).unwrap();
+    let result = ocr.classification_bbox(image_slice, &result1).unwrap();
+
+    // Prevent c from being released
+    Box::into_raw(ocr);
+    Box::into_raw(detection_ocr);
+
+    // Convert result to JSON string
+    let json = serde_json::to_string(&result).unwrap();
+    // let json =  ddddocr::MapJson::json(&result);
+    // Convert JSON string from UTF-8 to GBK
+    match GBK.encode(&json, EncoderTrap::Replace) {
+        Ok(encoded) => {
+            match CString::new(encoded) {
+                Ok(s) => s.into_raw(),
+                Err(_) => std::ptr::null(),
+            }
+        },
+        Err(_) => std::ptr::null(),
     }
 }
 // 滑块算法一
@@ -147,6 +184,18 @@ pub extern "stdcall" fn rust_free(ptr: *mut c_void) {
         let _ = Box::from_raw(ptr as *mut Ddddocr);
     }
 }
+
+#[no_mangle]
+pub extern "stdcall" fn free_string(ptr: *const c_char) {
+    if ptr.is_null() {
+        return;
+    }
+    // Convert the raw pointer back to a CString to deallocate the memory
+    unsafe {
+        let _ =  CString::from_raw(ptr as *mut c_char);
+    }
+}
+
 #[no_mangle]
 pub extern "stdcall" fn bson_to_json(data: *const u8, len: usize) -> *const c_char {
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
@@ -182,7 +231,6 @@ fn bson_to_json_string(data: &[u8]) -> Result<String, Box<dyn std::error::Error>
     Ok(json_string)
 }
 
-
 //回调函数示例！
 type CallbackFn = extern "stdcall" fn(int_param: c_int, str_param: *const c_char);
 //callback传递易语言函数地址指针 到整数 (&回调) 回调为子程序  这个子程序2个参数一个是整数型一个是文本型
@@ -197,7 +245,6 @@ pub extern "stdcall" fn set_callback_and_call(callback: CallbackFn) {
 //callback2传递易语言函数地址指针 到整数 (&回调) 回调为子程序  这个子程序2个参数都是整数型  指针到字节集 (bin, len)取回字节集
 //这里是循环回调数据用loop循环往易语言传回字节集和字节集长度
 type CallbackFn2 = extern "stdcall" fn(byte_ptr: *const std::ffi::c_uchar, byte_len: std::ffi::c_int);
-
 #[no_mangle]
 pub extern "stdcall" fn set_callback_and_call2(callback: CallbackFn2) {
     loop{
@@ -242,7 +289,6 @@ pub extern "stdcall" fn set_callback_and_call3(callback: CallbackFn3, file_path:
     }
 
 }
-
 //这个示例是易语言传递一个空白文本例如：str ＝ 取空白文本 (300) 调用e_redirect (str)  调试输出 (str) 可以取回结果11111
 #[no_mangle]
 pub extern "stdcall" fn e_redirect(buffer: *mut c_char) {
@@ -250,6 +296,7 @@ pub extern "stdcall" fn e_redirect(buffer: *mut c_char) {
     let rust_string = "11111";
     // 将Rust字符串转换为C风格的字符串（包括空终止符）
     let c_string = CString::new(rust_string).unwrap();
+
     // 获取C风格字符串的字节切片（包括空终止符）
     let bytes = c_string.as_bytes_with_nul();
     // 安全地将字节复制到易语言提供的缓冲区中
