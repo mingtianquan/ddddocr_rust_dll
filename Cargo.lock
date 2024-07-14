@@ -703,8 +703,8 @@ checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 
 [[package]]
 name = "ddddocr"
-version = "0.4.1"
-source = "git+https://github.com/86maid/ddddocr.git?branch=master#53c6594efcfbcf58ce8939a14387ce95095e0cc1"
+version = "0.4.2"
+source = "git+https://github.com/86maid/ddddocr.git?branch=master#7bbcd004f31e4b8cda32f6e6bc4660363ead23c5"
 dependencies = [
  "actix-multipart",
  "actix-web",

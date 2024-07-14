@@ -5,21 +5,21 @@ use std::os::raw::{c_char, c_int, c_uchar, c_void};
 use std::result::Result;
 use std::vec::Vec;
 use bson;
-use ddddocr::Ddddocr;
+use ddddocr::*;
 use serde_json;
 use std::sync::{Arc, Mutex};
 use encoding::{all::GBK, Encoding, EncoderTrap};
 //初始化ocr识别
 #[no_mangle]
 pub extern "stdcall" fn initialize_OCR() -> *mut c_void {
-    let c = ddddocr::ddddocr_classification().unwrap();
+    let c = ddddocr_classification().unwrap();
     let ocr : *mut Ddddocr = Box::into_raw(Box::new(c));
     ocr.cast()
 }
 //初始化目标检测
 #[no_mangle]
 pub extern "stdcall" fn initialize_detection() -> *mut c_void {
-    let c = ddddocr::ddddocr_detection().unwrap();
+    let c = ddddocr_detection().unwrap();
     let ocr : *mut Ddddocr = Box::into_raw(Box::new(c));
     ocr.cast()
 }
@@ -46,6 +46,42 @@ pub extern "stdcall" fn classification_byte_slice(c: *mut c_void,data: *const u8
         Err(_) => std::ptr::null(),
     }
 }
+
+//ocr识别概率识别
+#[no_mangle]
+pub extern "stdcall" fn classification_probability_byte_slice(c: *mut c_void,data: *const u8, len: usize,set_ranges: *const c_char) -> *const c_char {
+    let slice = unsafe { std::slice::from_raw_parts(data, len) };
+    let image_bytes = Vec::from(slice);
+    let mut ocr: Box<Ddddocr> = unsafe{
+        Box::from_raw(c.cast())
+    };
+
+    let c_str = unsafe { CStr::from_ptr(set_ranges) };
+    let set_ranges = c_str.to_str().expect("Invalid UTF-8 string");
+    ocr.set_ranges(set_ranges);
+    let mut result = ocr.classification_probability(image_bytes, false).unwrap();
+    println!("概率: {}", result.json());
+    println!("识别结果: {}", result.get_text().to_string());
+    //cstr函数结束生命周期就结束了，指向的指针也就无效了
+    // let combined_content = format!("{}{}", result.get_text().to_string(), result.json().to_string());
+    let res = result.json().to_string();
+    // 保证c不被释放
+    Box::into_raw(ocr);
+    // res.as_ptr()
+    match GBK.encode(&res, EncoderTrap::Replace) {
+        Ok(encoded) => {
+            match CString::new(encoded) {
+                Ok(s) => s.into_raw(),
+                Err(_) => std::ptr::null(),
+            }
+        },
+        Err(_) => std::ptr::null(),
+    }
+}
+
+
+
+
 //目标检测
 #[no_mangle]
 pub extern "stdcall" fn detection_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
@@ -119,7 +155,7 @@ pub extern "stdcall" fn slideral_gorithm_one_slide_match(target: *const u8, len:
     let target_bytes = Vec::from(slicetarget);
     let background_bytes = Vec::from(slicebackground);
 
-    let res = ddddocr::slide_match(target_bytes, background_bytes).unwrap();
+    let res = slide_match(target_bytes, background_bytes).unwrap();
 
     // res.as_ptr()
     let json = serde_json::to_string(&res).unwrap();
@@ -141,7 +177,7 @@ pub extern "stdcall" fn slideral_gorithm_one_simple_slide_match(target: *const u
     let slicebackground = unsafe { std::slice::from_raw_parts(background, len2) };
     let target_bytes = Vec::from(slicetarget);
     let background_bytes = Vec::from(slicebackground);
-    let res = ddddocr::simple_slide_match(target_bytes, background_bytes).unwrap();
+    let res = simple_slide_match(target_bytes, background_bytes).unwrap();
     let json = serde_json::to_string(&res).unwrap();
     match CString::new(json) {
         Ok(s) => {
@@ -161,7 +197,7 @@ pub extern "stdcall" fn slideral_gorithm_two_slide_comparison(target: *const u8,
     let slicebackground = unsafe { std::slice::from_raw_parts(background, len2) };
     let target_bytes = Vec::from(slicetarget);
     let background_bytes = Vec::from(slicebackground);
-    let res = ddddocr::slide_comparison(target_bytes, background_bytes).unwrap();
+    let res = slide_comparison(target_bytes, background_bytes).unwrap();
     let json = serde_json::to_string(&res).unwrap();
     match CString::new(json) {
         Ok(s) => {
