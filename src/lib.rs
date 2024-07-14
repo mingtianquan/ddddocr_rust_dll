@@ -8,7 +8,7 @@ use bson;
 use ddddocr::*;
 use serde_json;
 use std::sync::{Arc, Mutex};
-use encoding::{all::GBK, Encoding, EncoderTrap};
+use encoding::{all::GBK, Encoding, EncoderTrap, DecoderTrap};
 //初始化ocr识别
 #[no_mangle]
 pub extern "stdcall" fn initialize_OCR() -> *mut c_void {
@@ -23,6 +23,46 @@ pub extern "stdcall" fn initialize_detection() -> *mut c_void {
     let ocr : *mut Ddddocr = Box::into_raw(Box::new(c));
     ocr.cast()
 }
+//载入自定义模型，初始化，识别请用classification_byte_slice
+#[no_mangle]
+pub extern "stdcall" fn load_model_charset(data: *const u8, len: usize, charsetdata: *const u8, charsetlen: usize) -> *mut c_void {
+    // Convert raw pointers to slices
+    let slice = unsafe { std::slice::from_raw_parts(data, len) };
+    let model_bytes = Vec::from(slice);
+    let charset = unsafe { std::slice::from_raw_parts(charsetdata, charsetlen) };
+    // Convert charset bytes to UTF-8 string
+    let charset_str_result = std::str::from_utf8(charset);
+    let charset_str = match charset_str_result {
+        Ok(s) => s,
+        Err(_) => {
+            // Handle invalid UTF-8 charset data
+            return std::ptr::null_mut();
+        }
+    };
+    // Deserialize JSON string to your charset type using serde_json
+    let charset_result = serde_json::from_str(charset_str);
+    let charset = match charset_result {
+        Ok(c) => c,
+        Err(_) => {
+            // Handle JSON deserialization error
+            return std::ptr::null_mut();
+        }
+    };
+    // Create Ddddocr instance
+    let ocr_result = Ddddocr::new(model_bytes, charset);
+    let c = match ocr_result {
+        Ok(c) => c,
+        Err(_) => {
+            // Handle Ddddocr creation error
+            return std::ptr::null_mut();
+        }
+    };
+    // Box the instance to manage memory properly
+    let ocr_box = Box::new(c);
+    // Return a raw pointer to the boxed instance
+    Box::into_raw(ocr_box) as *mut c_void
+}
+
 //ocr识别
 #[no_mangle]
 pub extern "stdcall" fn classification_byte_slice(c: *mut c_void,data: *const u8, len: usize) -> *const c_char {
@@ -78,8 +118,6 @@ pub extern "stdcall" fn classification_probability_byte_slice(c: *mut c_void,dat
         Err(_) => std::ptr::null(),
     }
 }
-
-
 
 
 //目标检测
@@ -327,20 +365,47 @@ pub extern "stdcall" fn set_callback_and_call3(callback: CallbackFn3, file_path:
 }
 //这个示例是易语言传递一个空白文本例如：str ＝ 取空白文本 (300) 调用e_redirect (str)  调试输出 (str) 可以取回结果11111
 #[no_mangle]
-pub extern "stdcall" fn e_redirect(buffer: *mut c_char) {
-    // 创建一个Rust字符串
-    let rust_string = "11111";
-    // 将Rust字符串转换为C风格的字符串（包括空终止符）
-    let c_string = CString::new(rust_string).unwrap();
+pub extern "stdcall" fn e_redirect(set_ranges: *const c_char, buffer: *mut c_char) {
+    // 确保从 C 传递的字符串是 ANSI 编码的，并将其转换为 Rust 字符串
+    let c_str = unsafe { CStr::from_ptr(set_ranges) };
+    let ansi_bytes = c_str.to_bytes();
 
-    // 获取C风格字符串的字节切片（包括空终止符）
+    // 将 ANSI 编码的字节转换为 UTF-8 编码的字符串
+    let utf8_string = match GBK.decode(ansi_bytes, DecoderTrap::Strict) {
+        Ok(s) => s,
+        Err(_) => {
+            // 处理解码错误
+            return;
+        }
+    };
+
+    // 创建一个 Rust 字符串
+    let rust_string = "11111";
+    let result = format!("{}{}", utf8_string, rust_string);
+
+    // 将结果字符串再编码为 GBK
+    let gbk_result = match GBK.encode(&result, EncoderTrap::Replace) {
+        Ok(encoded) => encoded,
+        Err(_) => {
+            // 处理编码错误
+            return;
+        }
+    };
+
+    // 将 GBK 编码的字节转换为 C 风格的字符串（包括空终止符）
+    let c_string = match CString::new(gbk_result) {
+        Ok(s) => s,
+        Err(_) => {
+            // 处理无效的 C 字符串（包含内嵌空字符）
+            return;
+        }
+    };
+
+    // 获取 C 风格字符串的字节切片（包括空终止符）
     let bytes = c_string.as_bytes_with_nul();
+
     // 安全地将字节复制到易语言提供的缓冲区中
     unsafe {
         std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const _, buffer as *mut _, bytes.len());
     }
-    // Rust字符串和C风格字符串的内存管理由Rust和CString自动处理
-    // 我们不需要在这里手动释放任何内存，因为C字符串的生命周期与Rust字符串绑定
-    // 易语言负责提供的缓冲区的内存管理
 }
-
