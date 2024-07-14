@@ -115,7 +115,7 @@ pub extern "stdcall" fn classification_probability_byte_slice(c: *mut c_void,dat
     if !set_ranges.is_empty() {
         ocr.set_ranges(set_ranges);
     } else {
-        ocr.set_ranges(ddddocr::CharsetRange::from(set_rangesi_32));
+        ocr.set_ranges(set_rangesi_32);
     }
 
     // Perform OCR classification
