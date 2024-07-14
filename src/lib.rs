@@ -89,31 +89,58 @@ pub extern "stdcall" fn classification_byte_slice(c: *mut c_void,data: *const u8
 
 //ocr识别概率识别
 #[no_mangle]
-pub extern "stdcall" fn classification_probability_byte_slice(c: *mut c_void,data: *const u8, len: usize,set_ranges: *const c_char) -> *const c_char {
+pub extern "stdcall" fn classification_probability_byte_slice(c: *mut c_void,data: *const u8, len: usize,set_rangesi_32: i32,set_ranges: *const c_char) -> *const c_char {
+    // Convert raw pointers to slices
     let slice = unsafe { std::slice::from_raw_parts(data, len) };
     let image_bytes = Vec::from(slice);
-    let mut ocr: Box<Ddddocr> = unsafe{
-        Box::from_raw(c.cast())
+
+    // Handle OCR instance
+    let mut ocr: Box<Ddddocr> = unsafe { Box::from_raw(c.cast()) };
+
+    // Convert set_ranges from C string to Rust string, considering it may be ANSI
+    let set_ranges = if !set_ranges.is_null() {
+        let c_str = unsafe { CStr::from_ptr(set_ranges) };
+        match c_str.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                // Handle invalid UTF-8 string
+                return std::ptr::null();
+            }
+        }
+    } else {
+        String::new()
     };
 
-    let c_str = unsafe { CStr::from_ptr(set_ranges) };
-    let set_ranges = c_str.to_str().expect("Invalid UTF-8 string");
-    ocr.set_ranges(set_ranges);
-    let mut result = ocr.classification_probability(image_bytes, false).unwrap();
+    // If set_ranges is not empty, set it; otherwise, use set_rangesi32
+    if !set_ranges.is_empty() {
+        ocr.set_ranges(set_ranges);
+    } else {
+        ocr.set_ranges(ddddocr::CharsetRange::from(set_rangesi_32));
+    }
+
+    // Perform OCR classification
+    let mut result = match ocr.classification_probability(image_bytes, false) {
+        Ok(r) => r,
+        Err(_) => {
+            // Handle OCR classification error
+            return std::ptr::null();
+        }
+    };
+
     println!("概率: {}", result.json());
     println!("识别结果: {}", result.get_text().to_string());
-    //cstr函数结束生命周期就结束了，指向的指针也就无效了
-    // let combined_content = format!("{}{}", result.get_text().to_string(), result.json().to_string());
+
+    // Convert result to JSON string
     let res = result.json().to_string();
-    // 保证c不被释放
+
+    // Ensure OCR instance is not freed
     Box::into_raw(ocr);
-    // res.as_ptr()
+
+    // Encode the result as GBK and return it as a C string
     match GBK.encode(&res, EncoderTrap::Replace) {
-        Ok(encoded) => {
-            match CString::new(encoded) {
-                Ok(s) => s.into_raw(),
-                Err(_) => std::ptr::null(),
-            }
+        Ok(encoded) => match CString::new(encoded) {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null(),
         },
         Err(_) => std::ptr::null(),
     }
